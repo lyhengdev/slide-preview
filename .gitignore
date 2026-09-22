@@ -16,3 +16,4 @@ packages/database/generated/
 # Local storage
 var/
 storage-data/
+.idea

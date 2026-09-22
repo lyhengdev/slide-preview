@@ -235,7 +235,8 @@ export function ViewerPage() {
   // they can obscure the content whenever the window loses focus (which is
   // exactly when a screenshot is taken) and record the attempt.
   useEffect(() => {
-    if (!state?.security?.blockScreenshots) return;
+    if (!state?.security?.blockScreenshots && !(state?.security?.requireFullscreen && !fullscreenSupported()))
+      return;
     const onBlur = () => {
       setScreenshotBlocked(true);
       void reportSecurityEvent("SCREENSHOT_BLOCKED");
@@ -262,6 +263,13 @@ export function ViewerPage() {
   // Fullscreen requirement
   useEffect(() => {
     if (!state?.security?.requireFullscreen) return;
+    // iPhone Safari can't be driven into element fullscreen. Stop the admin
+    // from chasing a locker screen that can never satisfy — record it once and
+    // rely on the forced local anti-capture instead.
+    if (!fullscreenSupported()) {
+      void reportSecurityEvent("FULLSCREEN_UNSUPPORTED");
+      return;
+    }
     const onChange = () => {
       const exited = !isFullscreen();
       setFullscreenWarning(exited);
@@ -369,6 +377,9 @@ export function ViewerPage() {
         detectionAction: "LOG",
       };
 
+  const fullscreenLockable = fullscreenSupported();
+  const captureForced = Boolean(state?.security?.requireFullscreen && !fullscreenLockable);
+  const fullscreenEnforceable = Boolean(state?.security?.requireFullscreen && fullscreenLockable);
   const canShow =
     state?.ok &&
     state.sessionActive &&
@@ -378,7 +389,7 @@ export function ViewerPage() {
     !crossTabConflict &&
     // When the event requires fullscreen, content must stay hidden until the
     // judge re-enters it; otherwise the gate below is never reachable.
-    (state.security?.requireFullscreen ? !fullscreenWarning : true);
+    (fullscreenEnforceable ? !fullscreenWarning : true);
   const canNavigate = state?.allowJudgeNavigation ?? true;
 
   const watermarkInfo: WatermarkInfo = {
@@ -403,7 +414,7 @@ export function ViewerPage() {
               <WifiOff className="h-3.5 w-3.5" /> Reconnecting…
             </span>
           )}
-          {state?.security?.requireFullscreen && !isFullscreen() && (
+          {fullscreenEnforceable && !isFullscreen() && (
             <Button
               variant="secondary"
               className="!py-1 text-xs"
@@ -430,6 +441,13 @@ export function ViewerPage() {
         <div className="flex items-center justify-center gap-2 bg-amber-500/15 px-4 py-2 text-xs text-amber-200">
           <ShieldAlert className="h-3.5 w-3.5" />
           Camera security was relaxed by the admin ({override} mode).
+        </div>
+      )}
+
+      {captureForced && (
+        <div className="flex items-center justify-center gap-2 bg-accent-500/15 px-4 py-2 text-xs text-accent-200">
+          <ShieldAlert className="h-3.5 w-3.5" />
+          This device can't enter fullscreen — watermark and auto-hide protection stay active.
         </div>
       )}
 

@@ -35,6 +35,7 @@ import {
   onFullscreenChange,
   requestFullscreen,
 } from "../../lib/fullscreen";
+import { iosVideoFullscreenSupported, presentSlideInIOSPlayer } from "../../lib/ios-fullscreen";
 import "../../camera.css";
 
 type DetectionAction = "LOG" | "WARN" | "BLUR" | "LOCK";
@@ -378,6 +379,7 @@ export function ViewerPage() {
       };
 
   const fullscreenLockable = fullscreenSupported();
+  const iosFullscreen = iosVideoFullscreenSupported();
   const captureForced = Boolean(state?.security?.requireFullscreen && !fullscreenLockable);
   const fullscreenEnforceable = Boolean(state?.security?.requireFullscreen && fullscreenLockable);
   const canShow =
@@ -398,6 +400,30 @@ export function ViewerPage() {
     sessionId: state?.pitchSessionId ?? "",
   };
 
+  const goFullscreen = () => {
+    if (!state?.deckActive || !state.pitchSessionId || state.currentSlide <= 0) return;
+    // iPhone: open the slide inside the native fullscreen video player. iOS
+    // shields fullscreen video from screen capture, hides the browser chrome,
+    // and the slide is re-composited with a per-judge watermark.
+    if (iosFullscreen) {
+      const tier = activeTier === "preview" ? "full" : activeTier;
+      const src = slideUrl({
+        number: state.currentSlide,
+        pitchSessionId: state.pitchSessionId,
+        deviceToken: state.deviceToken,
+        tier,
+      });
+      void presentSlideInIOSPlayer({
+        src,
+        watermarkText: `${watermarkInfo.judgeCode} · ${watermarkInfo.eventTitle}`,
+      });
+      return;
+    }
+    void requestFullscreen().then((entered) => {
+      if (!entered) setFullscreenWarning(true);
+    });
+  };
+
   return (
     <div className="flex min-h-screen flex-col bg-ink-950 text-white">
       <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
@@ -414,15 +440,11 @@ export function ViewerPage() {
               <WifiOff className="h-3.5 w-3.5" /> Reconnecting…
             </span>
           )}
-          {fullscreenEnforceable && !isFullscreen() && (
+          {state?.deckActive && (fullscreenEnforceable ? !isFullscreen() : iosFullscreen) && (
             <Button
               variant="secondary"
               className="!py-1 text-xs"
-              onClick={() => {
-                void requestFullscreen().then((entered) => {
-                  if (!entered) setFullscreenWarning(true);
-                });
-              }}
+              onClick={goFullscreen}
             >
               <Maximize2 className="h-3 w-3" /> Fullscreen
             </Button>
@@ -447,7 +469,8 @@ export function ViewerPage() {
       {captureForced && (
         <div className="flex items-center justify-center gap-2 bg-accent-500/15 px-4 py-2 text-xs text-accent-200">
           <ShieldAlert className="h-3.5 w-3.5" />
-          This device can't enter fullscreen — watermark and auto-hide protection stay active.
+          This device can't enter fullscreen — tap <b>Fullscreen</b> to open the slide in a
+          protected player; watermark and auto-hide stay active.
         </div>
       )}
 

@@ -2,7 +2,7 @@ services:
   - type: web
     name: ke-pitch-web
     runtime: image
-    repo: https://github.com/ke-secure-pitch/secure-pitch
+    repo: https://github.com/lyhengdev/slide-preview
     plan: free
     envVars:
       - key: VITE_API_URL
@@ -20,7 +20,7 @@ services:
   - type: web
     name: ke-pitch-api
     runtime: image
-    repo: https://github.com/ke-secure-pitch/secure-pitch
+    repo: https://github.com/lyhengdev/slide-preview
     plan: starter
     healthCheckPath: /api/health
     preDeployCommand: ./scripts/predeploy.sh
@@ -67,7 +67,7 @@ services:
   - type: worker
     name: ke-pitch-worker
     runtime: image
-    repo: https://github.com/ke-secure-pitch/secure-pitch
+    repo: https://github.com/lyhengdev/slide-preview
     plan: starter
     envVars:
       - key: NODE_ENV
@@ -98,7 +98,7 @@ services:
   - type: private
     name: ke-pitch-storage
     runtime: image
-    repo: https://github.com/ke-secure-pitch/secure-pitch
+    repo: https://github.com/lyhengdev/slide-preview
     plan: starter
     disk:
       name: ke-data

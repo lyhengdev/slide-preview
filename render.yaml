@@ -1,58 +1,23 @@
+# Single-service deployment: everything (web + API + storage + worker) runs in
+# one container. Postgres is an external Neon database; the only extra resource
+# is a managed Redis instance used by the deck-processing queue.
 services:
   - type: web
-    name: ke-pitch-web
+    name: ke-pitch-all
     runtime: image
     repo: https://github.com/lyhengdev/slide-preview
     plan: free
-    envVars:
-      - key: VITE_API_URL
-        fromService:
-          name: ke-pitch-api
-          type: web
-          property: url
-    image:
-      path: ./Dockerfile.web
-    buildFilter:
-      paths:
-        - apps/web/**
-        - packages/**
-
-  - type: web
-    name: ke-pitch-api
-    runtime: image
-    repo: https://github.com/lyhengdev/slide-preview
-    plan: starter
     healthCheckPath: /api/health
-    preDeployCommand: ./scripts/predeploy.sh
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 4000
-      - key: PUBLIC_URL
-        fromService:
-          name: ke-pitch-api
-          type: web
-          property: url
-      - key: WEB_URL
-        fromService:
-          name: ke-pitch-web
-          type: web
-          property: url
       - key: DATABASE_URL
-        fromDatabase:
-          name: ke-pitch-db
-          property: connectionString
+        sync: false
       - key: REDIS_URL
         fromService:
           name: ke-pitch-cache
           type: redis
           property: connectionString
-      - key: STORAGE_URL
-        fromService:
-          name: ke-pitch-storage
-          type: private
-          property: hostAndPort
       - key: STORAGE_TOKEN
         sync: false
       - key: JWT_SECRET
@@ -62,65 +27,7 @@ services:
       - key: COOKIE_SECURE
         value: "true"
     image:
-      path: ./Dockerfile.api
-
-  - type: worker
-    name: ke-pitch-worker
-    runtime: image
-    repo: https://github.com/lyhengdev/slide-preview
-    plan: starter
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: ke-pitch-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: ke-pitch-cache
-          type: redis
-          property: connectionString
-      - key: STORAGE_URL
-        fromService:
-          name: ke-pitch-storage
-          type: private
-          property: hostAndPort
-      - key: STORAGE_TOKEN
-        sync: false
-      - key: SLIDE_WIDTH
-        value: "1600"
-      - key: SLIDE_QUALITY
-        value: "80"
-    image:
-      path: ./Dockerfile.worker
-
-  - type: private
-    name: ke-pitch-storage
-    runtime: image
-    repo: https://github.com/lyhengdev/slide-preview
-    plan: starter
-    disk:
-      name: ke-data
-      mountPath: /var/data
-      sizeGB: 20
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: PORT
-        value: 4100
-      - key: DATA_DIR
-        value: /var/data
-      - key: STORAGE_TOKEN
-        sync: false
-    image:
-      path: ./Dockerfile.storage
-
-  - type: postgres
-    name: ke-pitch-db
-    databaseName: ke_pitch
-    plan: starter
-    ipAllowList: []
+      path: ./Dockerfile.all
 
   - type: redis
     name: ke-pitch-cache

@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1
+# Single-image deployment: nginx (web) + API + storage + deck-processing worker
+# run inside one container so Render needs a single web service.
+# - nginx serves the built web app on ${PORT} and proxies /api + /socket.io to the API.
+# - The storage service listens on 4100 (loopback only) and keeps files under /var/data.
+# - The worker consumes the BullMQ "deck-processing" queue from Redis.
+FROM node:22-slim AS base
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  libreoffice-writer libreoffice-impress \
+  poppler-utils \
+  && rm -rf /var/lib/apt/lists/*
+RUN corepack enable
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+
+FROM base AS build
+WORKDIR /repo
+COPY . .
+RUN pnpm install --frozen-lockfile=false
+RUN pnpm --filter @ke/database db:generate
+RUN pnpm --filter @ke/database build
+RUN pnpm --filter @ke/api build
+RUN pnpm --filter @ke/worker build
+RUN pnpm --filter @ke/storage build
+RUN pnpm --filter @ke/web build
+
+FROM base AS runtime
+ENV NODE_ENV=production
+WORKDIR /repo
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  nginx gettext-base \
+  && rm -rf /var/lib/apt/lists/* \
+  && rm -f /etc/nginx/sites-enabled/default
+RUN corepack enable
+
+COPY package.json pnpm-workspace.yaml turbo.json tsconfig.base.json ./
+COPY --from=build /repo/node_modules ./node_modules
+COPY --from=build /repo/apps ./apps
+COPY --from=build /repo/packages ./packages
+
+COPY deploy/nginx.all.conf.template /etc/nginx/templates/default.conf.template
+COPY deploy/start.sh /usr/local/bin/start-all.sh
+RUN chmod +x /usr/local/bin/start-all.sh \
+  && cp -r apps/web/dist /usr/share/nginx/html \
+  && mkdir -p /var/data
+
+EXPOSE 80
+CMD ["/usr/local/bin/start-all.sh"]

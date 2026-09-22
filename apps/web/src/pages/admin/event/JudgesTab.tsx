@@ -98,11 +98,7 @@ export function JudgesTab({ event }: { event: any }) {
                 <Badge color={j.active ? "green" : "red"}>{j.active ? "Active" : "Disabled"}</Badge>
               </div>
               <p className="text-xs text-ink-400 break-all">{j.email ?? "no email"}</p>
-              {j.assignments?.length > 0 && (
-                <p className="mt-2 text-xs text-ink-400">
-                  Rounds: {j.assignments.map((a: any) => a.pitchSection.name).join(", ")}
-                </p>
-              )}
+              <RoundAssignments judge={j} sections={event.sections ?? []} onChange={invalidate} />
               <div className="mt-3">
                 <Button
                   variant="ghost"
@@ -156,6 +152,91 @@ export function JudgesTab({ event }: { event: any }) {
           error={createJudge.error?.message}
         />
       </Modal>
+    </div>
+  );
+}
+
+function RoundAssignments({
+  judge,
+  sections,
+  onChange,
+}: {
+  judge: any;
+  sections: any[];
+  onChange: () => void;
+}) {
+  const [pick, setPick] = useState("");
+  const assignedIds = new Set((judge.assignments ?? []).map((a: any) => a.pitchSectionId));
+
+  const assign = useMutation({
+    mutationFn: async (pitchSectionId: string) => {
+      const res = await fetch(`${API_BASE_URL}/judges/${judge.id}/assignments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ pitchSectionId }),
+      });
+      if (!res.ok) throw new Error("Could not assign round");
+      setPick("");
+    },
+    onSuccess: onChange,
+  });
+
+  const remove = useMutation({
+    mutationFn: (pitchSectionId: string) =>
+      adminFetch(`/judges/${judge.id}/assignments/${pitchSectionId}`, { method: "DELETE" }),
+    onSuccess: onChange,
+  });
+
+  if (sections.length === 0) return null;
+  const assignable = sections.filter((s: any) => !assignedIds.has(s.id));
+
+  return (
+    <div className="mt-3 border-t border-ink-100 pt-3">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">Rounds</p>
+      <div className="flex flex-wrap gap-1.5">
+        {(judge.assignments ?? []).map((a: any) => (
+          <span
+            key={a.pitchSectionId}
+            className="inline-flex items-center gap-1 rounded-full bg-accent-100 px-2 py-0.5 text-xs font-medium text-accent-700"
+          >
+            {a.pitchSection?.name ?? "Round"}
+            <button
+              className="text-accent-500 hover:text-accent-700"
+              disabled={remove.isPending}
+              onClick={() => remove.mutate(a.pitchSectionId)}
+              title="Remove"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      {assignable.length > 0 && (
+        <div className="mt-2 flex items-center gap-2">
+          <select className="input" value={pick} onChange={(e) => setPick(e.target.value)}>
+            <option value="">Assign a round…</option>
+            {assignable.map((s: any) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <Button
+            variant="secondary"
+            className="!px-3 !py-1 text-xs"
+            disabled={!pick || assign.isPending}
+            onClick={() => pick && assign.mutate(pick)}
+          >
+            Add
+          </Button>
+        </div>
+      )}
+      {(assign.error || remove.error) && (
+        <p className="mt-1 text-xs text-red-500">
+          {(assign.error ?? remove.error) instanceof Error ? (assign.error ?? remove.error)?.message : "Round update failed"}
+        </p>
+      )}
     </div>
   );
 }

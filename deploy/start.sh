@@ -19,12 +19,23 @@ mkdir -p /var/data
 # Bind the HTTP port immediately so Render can detect it, then do the rest.
 log "rendering nginx config for :${HTTP_PORT}"
 export NGINX_PORT="$HTTP_PORT"
-envsubst '$NGINX_PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
-unset NGINX_PORT
+if [ "$HTTP_PORT" = "80" ]; then
+  EXTRA_LISTEN_80=""
+else
+  EXTRA_LISTEN_80="listen 80;"
+fi
+export EXTRA_LISTEN_80
+envsubst '$NGINX_PORT $EXTRA_LISTEN_80' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
+unset NGINX_PORT EXTRA_LISTEN_80
 nginx -t
 nginx -g 'daemon off;' &
 NGINX_PID=$!
 trap 'kill "$NGINX_PID" 2>/dev/null || true' INT TERM
+
+sleep 2
+curl -fsS -o /dev/null --max-time 4 "http://127.0.0.1:${HTTP_PORT}/" \
+  && log "nginx answering on :${HTTP_PORT}" \
+  || log "WARNING: nginx not answering on :${HTTP_PORT} (HTTP_Port=${HTTP_PORT}, rendered=$(sed -n '1,3p' /etc/nginx/conf.d/default.conf | tr '\n' ' ')|$(grep -c 'listen' /etc/nginx/conf.d/default.conf) listen lines)" || true
 
 # Run migrations with the bundled CLI (no pnpm/corepack, no registry access).
 log "applying database migrations"
@@ -49,15 +60,15 @@ run_forever worker   bash -c 'cd /repo/apps/worker   && exec node --import tsx -
 run_forever api      bash -c 'cd /repo/apps/api      && PORT=4000 exec node --import tsx --enable-source-maps dist/server.js'
 
 log "waiting for the API to become healthy"
-for i in $(seq 1 60); do
-  if curl -fsS "http://127.0.0.1:4000/api/health" >/dev/null 2>&1; then
-    log "API healthy after ${i}s"
+for i in $(seq 1 30); do
+  if resp=$(curl -sS --max-time 4 -w '\n%{http_code}' "http://127.0.0.1:4000/api/health" 2>/dev/null) && [ "${resp##*$'\n'}" = "200" ]; then
+    log "API healthy after $((i * 2))s"
     break
   fi
-  if [ "$i" -eq 60 ]; then
-    log "WARNING: API not healthy within 60s"
+  if [ "$i" -eq 30 ]; then
+    log "WARNING: API not healthy after 60s (last response: ${resp:-none})"
   fi
-  sleep 1
+  sleep 2
 done
 
 wait "$NGINX_PID"

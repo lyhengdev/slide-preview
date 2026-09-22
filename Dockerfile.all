@@ -41,7 +41,10 @@ COPY --from=build /repo/packages ./packages
 COPY deploy/nginx.all.conf.template /etc/nginx/templates/default.conf.template
 COPY deploy/start.sh /usr/local/bin/start-all.sh
 RUN chmod +x /usr/local/bin/start-all.sh \
-  && cp -r apps/web/dist /usr/share/nginx/html \
+  && rm -f /etc/nginx/sites-enabled/default \
+  && rm -rf /var/www/html \
+  && test -f apps/web/dist/index.html \
+  && cp -r apps/web/dist/. /usr/share/nginx/html/ \
   && mkdir -p /var/data
 
 EXPOSE 80

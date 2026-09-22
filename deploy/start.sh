@@ -21,6 +21,7 @@ log "rendering nginx config for :${HTTP_PORT}"
 export NGINX_PORT="$HTTP_PORT"
 envsubst '$NGINX_PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
 unset NGINX_PORT
+nginx -t
 nginx -g 'daemon off;' &
 NGINX_PID=$!
 trap 'kill "$NGINX_PID" 2>/dev/null || true' INT TERM

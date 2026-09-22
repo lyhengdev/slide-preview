@@ -1,0 +1,303 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  EVENT_ADMIN
+}
+
+enum EventStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum SectionType {
+  PRELIMINARY
+  SEMI_FINAL
+  FINAL
+}
+
+enum DeckStatus {
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum JudgeSessionStatus {
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+enum PitchSessionStatus {
+  SCHEDULED
+  ACTIVE
+  ENDED
+}
+
+enum DetectionAction {
+  LOG
+  WARN
+  BLUR
+  LOCK
+}
+
+enum SecurityEventType {
+  FACE_MISSING
+  FACE_RESTORED
+  MULTIPLE_PERSONS
+  POSSIBLE_PHONE_DETECTED
+  TAB_HIDDEN
+  TAB_VISIBLE
+  FULLSCREEN_EXIT
+  SCREENSHOT_ATTEMPT
+  SCREENSHOT_BLOCKED
+  SCREENSHOT_UNBLOCKED
+  MULTI_TAB_OPEN
+  DEVICE_CHANGE_BLOCKED
+  JOIN_DENIED
+}
+
+model User {
+  id               String       @id @default(cuid())
+  email            String       @unique
+  passwordHash     String
+  name             String
+  role             Role         @default(EVENT_ADMIN)
+  twoFactorEnabled Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  events           Event[]
+  auditLogs        AuditLog[]
+
+  @@index([role])
+}
+
+model Event {
+  id              String                 @id @default(cuid())
+  title           String
+  slug            String                 @unique
+  description     String?
+  status          EventStatus            @default(DRAFT)
+  startDate       DateTime?
+  endDate         DateTime?
+  createdById     String
+  createdBy       User                   @relation(fields: [createdById], references: [id])
+  security        EventSecuritySettings?
+  sections        PitchSection[]
+startups        Startup[]
+        judges          Judge[]
+        sessions        PitchSession[]
+  securityEvents  SecurityEvent[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([createdById])
+  @@index([status])
+}
+
+model EventSecuritySettings {
+  id                    String         @id @default(cuid())
+  eventId               String         @unique
+  event                 Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  watermark             Boolean        @default(true)
+  watermarkText         String?        @default("CONFIDENTIAL")
+  singleDevice          Boolean        @default(true)
+  hideOnTabSwitch       Boolean        @default(true)
+  blockScreenshots      Boolean        @default(false)
+  requireFullscreen     Boolean        @default(false)
+  faceDetection         Boolean        @default(false)
+  multiplePersonDetection Boolean      @default(false)
+  phoneDetection        Boolean        @default(false)
+  cameraProcessing      String         @default("LOCAL")
+  storeCameraImages     Boolean        @default(false)
+  detectionAction       DetectionAction @default(LOG)
+  // Event-day escape hatch: temporarily relax/restore camera enforcement per
+  // pitch without mutating the event's real `detectionAction`. Cleared (null)
+  // when the event default should apply again.
+  overrideDetectionAction DetectionAction?
+  allowJudgeNavigation  Boolean        @default(true)
+  updatedAt             DateTime       @updatedAt
+}
+
+model PitchSection {
+  id          String            @id @default(cuid())
+  eventId     String
+  event       Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name        String
+  type        SectionType       @default(PRELIMINARY)
+  order       Int               @default(0)
+  startups    Startup[]
+  assignments JudgeAssignment[]
+  sessions    PitchSession[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([eventId])
+}
+
+model Judge {
+  id          String           @id @default(cuid())
+  eventId     String
+  event       Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  judgeCode   String
+  name        String
+  email       String?
+  pinHash     String?
+  active      Boolean          @default(true)
+  sessions    JudgeSession[]
+  assignments JudgeAssignment[]
+  securityEvents SecurityEvent[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([eventId, judgeCode])
+  @@index([eventId])
+}
+
+model JudgeAssignment {
+  id             String       @id @default(cuid())
+  judgeId        String
+  judge          Judge        @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  pitchSectionId String
+  pitchSection   PitchSection @relation(fields: [pitchSectionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([judgeId, pitchSectionId])
+}
+
+model Startup {
+  id            String        @id @default(cuid())
+  eventId       String
+  event         Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  pitchSectionId String?
+  pitchSection  PitchSection? @relation(fields: [pitchSectionId], references: [id], onDelete: SetNull)
+  name          String
+  description   String?
+  decks         Deck[]
+  sessions      PitchSession[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([eventId])
+}
+
+model Deck {
+  id              String       @id @default(cuid())
+  startupId       String
+  startup         Startup      @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  originalName    String
+  originalPath    String?
+  status          DeckStatus   @default(UPLOADED)
+  error           String?
+  slideCount      Int          @default(0)
+  slides          Slide[]
+  sessions        PitchSession[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([startupId])
+}
+
+model Slide {
+  id        String   @id @default(cuid())
+  deckId    String
+  deck      Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  number    Int
+  width     Int
+  height    Int
+  filePath  String
+  previewPath  String?
+  standardPath String?
+  createdAt DateTime @default(now())
+
+  @@unique([deckId, number])
+  @@index([deckId])
+}
+
+model JudgeSession {
+  id         String           @id @default(cuid())
+  judgeId    String
+  judge      Judge            @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  eventId    String
+  tokenHash  String           @unique
+  deviceId   String
+  userAgent  String?
+  ip         String?
+  status     JudgeSessionStatus @default(ACTIVE)
+  expiresAt  DateTime
+  createdAt  DateTime         @default(now())
+  lastSeenAt DateTime         @updatedAt
+
+  @@index([judgeId, status])
+  @@index([eventId])
+}
+
+model PitchSession {
+  id            String              @id @default(cuid())
+  eventId       String
+  event         Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  pitchSectionId String?
+  pitchSection  PitchSection?       @relation(fields: [pitchSectionId], references: [id], onDelete: SetNull)
+  startupId     String
+  startup       Startup             @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  deckId        String
+  deck          Deck                @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  status        PitchSessionStatus  @default(SCHEDULED)
+  currentSlide  Int                 @default(1)
+  joinToken     String?             @unique
+  joinTokenExpiresAt DateTime?
+  startedAt     DateTime?
+  endedAt       DateTime?
+  securityEvents SecurityEvent[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([eventId])
+  @@index([status])
+}
+
+model SecurityEvent {
+  id             String             @id @default(cuid())
+  eventId        String
+  event          Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  judgeId        String?
+  judge          Judge?             @relation(fields: [judgeId], references: [id], onDelete: SetNull)
+  pitchSessionId String?
+  pitchSession   PitchSession?      @relation(fields: [pitchSessionId], references: [id], onDelete: SetNull)
+  type           SecurityEventType
+  confidence     Float?
+  metadata       Json?
+  createdAt      DateTime           @default(now())
+
+  @@index([eventId, createdAt])
+  @@index([judgeId])
+  @@index([type])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  adminId    String?
+  admin      User?    @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([adminId])
+  @@index([action])
+  @@index([createdAt])
+}

@@ -1,0 +1,25 @@
+{
+  "name": "secure-pitch",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.12.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "dev:api": "turbo run dev --filter=@ke/api",
+    "dev:web": "turbo run dev --filter=@ke/web",
+    "dev:worker": "turbo run dev --filter=@ke/worker",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @ke/database db:generate",
+    "db:migrate": "pnpm --filter @ke/database db:migrate",
+    "db:push": "pnpm --filter @ke/database db:push",
+    "db:seed": "pnpm --filter @ke/api db:seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3"
+  }
+}

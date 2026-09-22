@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+dist
+**/dist
+generated
+packages/database/generated
+.git
+.github
+.env
+.env.*
+!.env.example
+*.log
+coverage
+.DS_Store
+docs
+README.md

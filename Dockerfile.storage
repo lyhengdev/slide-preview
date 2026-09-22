@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1
+FROM node:22-slim AS base
+RUN corepack enable
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+
+FROM base AS build
+WORKDIR /repo
+COPY . .
+RUN pnpm install --frozen-lockfile=false
+RUN pnpm --filter @ke/storage build
+
+FROM node:22-slim AS runtime
+ENV NODE_ENV=production
+WORKDIR /repo
+RUN corepack enable
+COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/ packages/
+COPY apps/storage/ apps/storage/
+COPY --from=build /repo/node_modules ./node_modules
+COPY --from=build /repo/packages/config/dist ./packages/config/dist
+COPY --from=build /repo/apps/storage/dist ./apps/storage/dist
+EXPOSE 4100
+CMD ["node", "--import", "tsx", "apps/storage/dist/server.js"]

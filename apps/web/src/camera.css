@@ -1,0 +1,6 @@
+body.camera-suspend .slide-canvas-img {
+  filter: blur(28px) saturate(0.3);
+}
+body.camera-locked .slide-canvas {
+  visibility: hidden;
+}

@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1
+FROM node:22-slim AS base
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  libreoffice-writer libreoffice-impress \
+  poppler-utils \
+  && rm -rf /var/lib/apt/lists/*
+RUN corepack enable
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+
+FROM base AS build
+WORKDIR /repo
+COPY . .
+RUN pnpm install --frozen-lockfile=false
+RUN pnpm --filter @ke/database db:generate
+RUN pnpm --filter @ke/worker build
+
+FROM base AS runtime
+ENV NODE_ENV=production
+WORKDIR /repo
+COPY package.json pnpm-workspace.yaml turbo.json tsconfig.base.json ./
+COPY packages/ packages/
+COPY apps/worker/ apps/worker/
+COPY --from=build /repo/node_modules ./node_modules
+COPY --from=build /repo/apps/worker/node_modules ./apps/worker/node_modules
+COPY --from=build /repo/packages/database/generated ./packages/database/generated
+COPY --from=build /repo/packages/*/dist ./packages/*/dist
+COPY --from=build /repo/apps/worker/dist ./apps/worker/dist
+WORKDIR /repo/apps/worker
+CMD ["node", "--import", "tsx", "--enable-source-maps", "dist/worker.js"]

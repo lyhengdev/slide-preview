@@ -1,0 +1,25 @@
+{
+  "name": "@ke/auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ke/config": "workspace:*",
+    "@ke/types": "workspace:*",
+    "@fastify/cookie": "^9.4.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.9.0",
+    "fastify": "^4.28.1",
+    "typescript": "^5.6.3"
+  }
+}

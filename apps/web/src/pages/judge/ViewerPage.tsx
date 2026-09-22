@@ -29,6 +29,12 @@ import { CameraSecurity, type CameraSecurityConfig } from "../../components/Came
 import { SlideStage } from "../../components/SlideStage";
 import { pickTier, preloadSlides, clearSlideCache, type SlideTier } from "../../lib/slide-cache";
 import { useSingleJudgeTab } from "../../hooks/useSingleJudgeTab";
+import {
+  fullscreenSupported,
+  isFullscreen,
+  onFullscreenChange,
+  requestFullscreen,
+} from "../../lib/fullscreen";
 import "../../camera.css";
 
 type DetectionAction = "LOG" | "WARN" | "BLUR" | "LOCK";
@@ -257,13 +263,13 @@ export function ViewerPage() {
   useEffect(() => {
     if (!state?.security?.requireFullscreen) return;
     const onChange = () => {
-      const exited = !document.fullscreenElement;
+      const exited = !isFullscreen();
       setFullscreenWarning(exited);
       if (exited) void reportSecurityEvent("FULLSCREEN_EXIT");
     };
-    document.addEventListener("fullscreenchange", onChange);
-    setFullscreenWarning(!document.fullscreenElement);
-    return () => document.removeEventListener("fullscreenchange", onChange);
+    const unsubscribe = onFullscreenChange(onChange);
+    setFullscreenWarning(!isFullscreen());
+    return unsubscribe;
   }, [state?.security?.requireFullscreen]);
 
   // Resolution-ladder preloader: first pull every slide at the tiny preview tier
@@ -397,11 +403,15 @@ export function ViewerPage() {
               <WifiOff className="h-3.5 w-3.5" /> Reconnecting…
             </span>
           )}
-          {state?.security?.requireFullscreen && !document.fullscreenElement && (
+          {state?.security?.requireFullscreen && !isFullscreen() && (
             <Button
               variant="secondary"
               className="!py-1 text-xs"
-              onClick={() => document.documentElement.requestFullscreen().catch(() => undefined)}
+              onClick={() => {
+                void requestFullscreen().then((entered) => {
+                  if (!entered) setFullscreenWarning(true);
+                });
+              }}
             >
               <Maximize2 className="h-3 w-3" /> Fullscreen
             </Button>
@@ -459,9 +469,9 @@ export function ViewerPage() {
           <SessionLocked
             state={state}
             fullscreenWarning={fullscreenWarning}
-            onEnterFullscreen={() =>
-              document.documentElement.requestFullscreen().catch(() => undefined)
-            }
+            onEnterFullscreen={() => {
+              void requestFullscreen();
+            }}
           />
         )}
 
@@ -550,6 +560,12 @@ function SessionLocked(props: {
         <p className="max-w-sm text-sm text-white/60">
           Return to fullscreen to continue viewing. This exit has been recorded.
         </p>
+        {!fullscreenSupported() && (
+          <p className="max-w-sm text-xs text-amber-300/80">
+            Your browser can't be forced into fullscreen (e.g. iPhone Safari). Ask the organiser to
+            relax the fullscreen requirement, or open this link on a desktop/iPad browser.
+          </p>
+        )}
         <Button variant="primary" onClick={onEnterFullscreen}>
           <Maximize2 className="h-4 w-4" /> Enter fullscreen
         </Button>

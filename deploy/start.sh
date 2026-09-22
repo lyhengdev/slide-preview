@@ -55,9 +55,11 @@ run_forever() {
   ) &
 }
 
-run_forever storage bash -c 'cd /repo/apps/storage && PORT=4100 exec node --import tsx --enable-source-maps dist/server.js'
-run_forever worker   bash -c 'cd /repo/apps/worker   && exec node --import tsx --enable-source-maps dist/worker.js'
-run_forever api      bash -c 'cd /repo/apps/api      && PORT=4000 exec node --import tsx --enable-source-maps dist/server.js'
+# Heap caps reserve most of the instance RAM for the worker + LibreOffice,
+# which spike during deck conversion. The worker gets the biggest allowance.
+run_forever storage bash -c 'cd /repo/apps/storage && PORT=4100 NODE_OPTIONS=--max-old-space-size=128 exec node --import tsx --enable-source-maps dist/server.js'
+run_forever worker   bash -c 'cd /repo/apps/worker   && NODE_OPTIONS=--max-old-space-size=256 exec node --import tsx --enable-source-maps dist/worker.js'
+run_forever api      bash -c 'cd /repo/apps/api      && PORT=4000 NODE_OPTIONS=--max-old-space-size=192 exec node --import tsx --enable-source-maps dist/server.js'
 
 log "waiting for the API to become healthy"
 for i in $(seq 1 30); do

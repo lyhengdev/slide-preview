@@ -9,6 +9,9 @@ import { prisma } from "@ke/database";
 
 const execFileAsync = promisify(execFile);
 
+// Process one image at a time to keep peak memory low on small instances.
+sharp.concurrency(1);
+
 interface StorageClient {
   fetchAsBuffer(id: string, kind?: string): Promise<{ data: Buffer; mime: string }>;
   upload(opts: {
@@ -87,12 +90,12 @@ async function renderPdfToPngs(pdfPath: string, outDir: string): Promise<string[
   const files = await fsp.readdir(outDir);
 
   if (pdftoppm?.endsWith("pdftoppm")) {
-    await execFileAsync(pdftoppm, ["-png", "-r", "150", pdfPath, prefix], {
+    await execFileAsync(pdftoppm, ["-png", "-r", "110", pdfPath, prefix], {
       timeout: 600_000,
       maxBuffer: 64 * 1024 * 1024,
     });
   } else if (pdftoppm?.endsWith("mutool")) {
-    await execFileAsync(pdftoppm, ["draw", "-o", `${prefix}-%03d.png`, "-r", "150", pdfPath], {
+    await execFileAsync(pdftoppm, ["draw", "-o", `${prefix}-%03d.png`, "-r", "110", pdfPath], {
       timeout: 600_000,
       maxBuffer: 64 * 1024 * 1024,
     });

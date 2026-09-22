@@ -16,13 +16,19 @@ export STORAGE_URL="${STORAGE_URL:-http://127.0.0.1:4100}"
 export COOKIE_SECURE="${COOKIE_SECURE:-true}"
 mkdir -p /var/data
 
-log "applying database migrations"
-pnpm --filter @ke/database db:deploy
-
+# Bind the HTTP port immediately so Render can detect it, then do the rest.
 log "rendering nginx config for :${HTTP_PORT}"
 export NGINX_PORT="$HTTP_PORT"
 envsubst '$NGINX_PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
 unset NGINX_PORT
+nginx -g 'daemon off;' &
+NGINX_PID=$!
+trap 'kill "$NGINX_PID" 2>/dev/null || true' INT TERM
+
+# Run migrations with the bundled CLI (no pnpm/corepack, no registry access).
+log "applying database migrations"
+node /repo/packages/database/node_modules/prisma/build/index.js migrate deploy \
+  --schema /repo/packages/database/prisma/schema.prisma
 
 # Each internal service runs in a restarting loop so one crash cannot take
 # down the whole box. Render health-checks nginx, which proxies /api/health.
@@ -48,10 +54,9 @@ for i in $(seq 1 60); do
     break
   fi
   if [ "$i" -eq 60 ]; then
-    log "WARNING: API not healthy within 60s, starting nginx anyway"
+    log "WARNING: API not healthy within 60s"
   fi
   sleep 1
 done
 
-log "starting nginx on :${HTTP_PORT}"
-exec nginx -g 'daemon off;'
+wait "$NGINX_PID"
